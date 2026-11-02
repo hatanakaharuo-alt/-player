@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141A21">
+<title>トルミル プレーヤー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF1F4;--surface:#FFFFFF;--ink:#1D2733;--muted:#5D6B7A;--line:#C9D2DB;
+  --accent:#0F7C8C;--accent-ink:#FFFFFF;--chip:#DDE4EA;--danger:#B23A3A;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#141A21;--surface:#1C242D;--ink:#E4E9EE;--muted:#93A1AF;--line:#2E3946;
+    --accent:#4FC3CF;--accent-ink:#0B2A2E;--chip:#26313C;--danger:#E07070;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141A21;--surface:#1C242D;--ink:#E4E9EE;--muted:#93A1AF;--line:#2E3946;
+  --accent:#4FC3CF;--accent-ink:#0B2A2E;--chip:#26313C;--danger:#E07070;color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Zen Kaku Gothic New",system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;
+  -webkit-tap-highlight-color:transparent;
+  padding-bottom:260px;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,label:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 0 12px}
+h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:.02em}
+.count{color:var(--muted);font-size:.85rem}
+.pickers{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.pick{
+  display:inline-flex;align-items:center;gap:6px;padding:10px 14px;border-radius:999px;
+  background:var(--chip);font-size:.9rem;cursor:pointer;position:relative;
+}
+.pick input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.pick.primary{background:var(--accent);color:var(--accent-ink);font-weight:500}
+.pick.clear{background:none;color:var(--danger);padding-inline:8px}
+.notice{font-size:.85rem;color:var(--muted);margin:0 0 12px;line-height:1.6}
+.notice:empty{display:none}
+.empty{text-align:center;padding:48px 16px;color:var(--muted);line-height:1.8}
+ol.list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+ol.list li{border-bottom:1px solid var(--line)}
+ol.list button{
+  width:100%;text-align:left;display:grid;grid-template-columns:2.4em 1fr;gap:8px;
+  padding:12px 4px;align-items:center;font-size:.95rem;line-height:1.4;
+}
+ol.list .n{color:var(--muted);font-variant-numeric:tabular-nums;font-size:.8rem;text-align:right}
+ol.list .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ol.list li.current button{color:var(--accent);font-weight:700}
+ol.list li.current .n{color:var(--accent)}
+
+/* player */
+.player{
+  position:fixed;left:0;right:0;bottom:0;z-index:10;
+  background:var(--surface);border-top:1px solid var(--line);
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px));
+}
+.player-in{max-width:640px;margin:0 auto}
+.now{font-weight:700;font-size:1.05rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:1.5em}
+.sub{font-size:.8rem;color:var(--muted);min-height:1.2em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seek{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;margin:10px 0 6px;font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:28px;background:transparent;margin:0;
+}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--accent) var(--p,0%),var(--line) var(--p,0%))}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--line)}
+input[type=range]::-moz-range-progress{height:4px;border-radius:2px;background:var(--accent)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);margin-top:-6px;border:0}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);border:0}
+.ctrl{display:flex;justify-content:space-between;align-items:center;max-width:380px;margin:0 auto}
+.ctrl button{width:52px;height:52px;display:grid;place-items:center;border-radius:50%;position:relative}
+.ctrl button svg{width:28px;height:28px;fill:currentColor}
+.ctrl .skip span{position:absolute;font-size:.6rem;font-weight:700;bottom:11px}
+.ctrl .play{width:68px;height:68px;background:var(--accent);color:var(--accent-ink)}
+.ctrl .play svg{width:34px;height:34px}
+.modes{display:flex;justify-content:center;gap:8px;margin-top:8px}
+.modes button{
+  display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;
+  font-size:.8rem;color:var(--muted);border:1px solid var(--line)
+}
+.modes button svg{width:16px;height:16px;fill:currentColor}
+.modes button[aria-pressed="true"]{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
+button:disabled{opacity:.35;cursor:default}
+
+/* power saving */
+.dim{
+  position:fixed;inset:0;z-index:100;background:#000;color:#555;display:none;
+  touch-action:manipulation;user-select:none;-webkit-user-select:none;
+}
+.dim.on{display:block}
+.dim-info{position:absolute;text-align:center;width:80%;left:10%;transition:top 2s linear}
+.dim-title{font-size:1rem;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dim-time{font-size:2rem;color:#555;font-variant-numeric:tabular-nums;margin-top:6px}
+.dim-hint{font-size:.75rem;color:#3a3a3a;margin-top:14px}
+@media (prefers-reduced-motion:reduce){.dim-info{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>トルミル プレーヤー</h1>
+    <span class="count" id="count"></span>
+  </header>
+  <div class="pickers">
+    <label class="pick primary">フォルダを選ぶ
+      <input type="file" id="pickDir" webkitdirectory directory multiple>
+    </label>
+    <label class="pick">曲を追加
+      <input type="file" id="pickFiles" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac" multiple>
+    </label>
+    <button class="pick clear" id="clearBtn" hidden>ライブラリを消去</button>
+  </div>
+  <p class="notice" id="notice"></p>
+  <div class="empty" id="empty">トルミルアプリのフォルダを選ぶと、ここに曲が並びます。<br>フォルダを選べない端末では「曲を追加」でまとめて選んでください。</div>
+  <ol class="list" id="list"></ol>
+</div>
+
+<audio id="audio" preload="metadata"></audio>
+
+<section class="player" aria-label="再生コントロール">
+  <div class="player-in">
+    <div class="now" id="nowTitle">曲が選ばれていません</div>
+    <div class="sub" id="nowSub"></div>
+    <div class="seek">
+      <span id="tCur">0:00</span>
+      <input type="range" id="seek" min="0" max="0" step="0.1" value="0" aria-label="再生位置">
+      <span id="tDur">0:00</span>
+    </div>
+    <div class="ctrl">
+      <button id="prevBtn" aria-label="前の曲"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+      <button id="backBtn" class="skip" aria-label="10秒戻す"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg><span>10</span></button>
+      <button id="playBtn" class="play" aria-label="再生"><svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg></button>
+      <button id="fwdBtn" class="skip" aria-label="10秒進める"><svg viewBox="0 0 24 24"><path d="M12 5V1l5 5-5 5V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z"/></svg><span>10</span></button>
+      <button id="nextBtn" aria-label="次の曲"><svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z"/></svg></button>
+    </div>
+    <div class="modes">
+      <button id="shuffleBtn" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M10.6 9.2 5.4 4 4 5.4l5.2 5.2zM14.5 4l2 2L4 18.6 5.4 20 17.9 7.5l2.1 2V4zm.3 9.4-1.4 1.4 3.1 3.1L14.5 20H20v-5.5l-2 2z"/></svg>ランダム</button>
+      <button id="repeatBtn" aria-pressed="false"><svg viewBox="0 0 24 24" id="repeatIcon"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg><span id="repeatLabel">繰り返しなし</span></button>
+      <button id="dimBtn"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8A9 9 0 0 0 12 3z"/></svg>省電力</button>
+    </div>
+  </div>
+</section>
+
+<div class="dim" id="dim" role="dialog" aria-label="省電力モード">
+  <div class="dim-info" id="dimInfo" style="top:40%">
+    <div class="dim-title" id="dimTitle"></div>
+    <div class="dim-time" id="dimTime">0:00</div>
+    <div class="dim-hint">2回タップで戻る</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const audio = $('audio');
+  const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|webm|mp4|m4b|3gp|amr)$/i;
+  const LS = {
+    get(k, d){ try { const v = localStorage.getItem('tmp.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v){ try { localStorage.setItem('tmp.' + k, JSON.stringify(v)); } catch {} }
+  };
+
+  let tracks = [];           // {id, name, blob}
+  let order = [];            // play order (indexes into tracks)
+  let pos = -1;              // position in order
+  let current = -1;          // index into tracks
+  let curUrl = null;
+  let pendingSeek = 0;
+  let shuffle = LS.get('shuffle', false);
+  let repeat = LS.get('repeat', 'all');  // off | all | one
+  let memOnly = false;
+  let db = null;
+
+  // ---------- IndexedDB ----------
+  function openDB(){
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('tolmiru-player', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('tracks', { keyPath: 'id' });
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  function tx(mode, fn){
+    return new Promise((res, rej) => {
+      const t = db.transaction('tracks', mode);
+      const s = t.objectStore('tracks');
+      const out = fn(s);
+      t.oncomplete = () => res(out && out.result);
+      t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error);
+    });
+  }
+
+  const collator = new Intl.Collator('ja', { numeric: true });
+  const sortTracks = () => tracks.sort((a, b) => collator.compare(a.id, b.id));
+  const displayName = n => n.replace(/\.[^.]+$/, '');
+
+  async function loadLibrary(){
+    try {
+      db = await openDB();
+      tracks = (await tx('readonly', s => s.getAll())) || [];
+    } catch (e) {
+      db = null; tracks = [];
+      setNotice('この端末では曲を保存できないため、毎回フォルダを選んでください。前回の曲と位置は覚えています。');
+    }
+    sortTracks();
+    renderList();
+    restoreLast();
+  }
+
+  async function addFiles(fileList, replace){
+    const files = [...fileList].filter(f => (f.type && f.type.startsWith('audio/')) || AUDIO_EXT.test(f.name));
+    if (!files.length){ setNotice('音楽ファイルが見つかりませんでした。トルミルの保存フォルダを選んでいるか確認してください。'); return; }
+    const wasId = current >= 0 ? tracks[current].id : LS.get('lastId', null);
+    const wasTime = current >= 0 ? audio.currentTime : LS.get('lastTime', 0);
+    const wasPlaying = !audio.paused;
+
+    const incoming = files.map(f => ({ id: f.webkitRelativePath || f.name, name: f.name, blob: f }));
+    if (replace) tracks = incoming;
+    else {
+      const map = new Map(tracks.map(t => [t.id, t]));
+      incoming.forEach(t => map.set(t.id, t));
+      tracks = [...map.values()];
+    }
+    sortTracks();
+
+    memOnly = false;
+    if (db){
+      setNotice('端末に保存しています… 0 / ' + incoming.length);
+      try {
+        if (replace) await tx('readwrite', s => s.clear());
+        let i = 0;
+        for (const t of incoming){
+          const blob = new Blob([await t.blob.arrayBuffer()], { type: t.blob.type || 'audio/mpeg' });
+          await tx('readwrite', s => s.put({ id: t.id, name: t.name, blob }));
+          i++;
+          if (i % 3 === 0 || i === incoming.length) setNotice('端末に保存しています… ' + i + ' / ' + incoming.length);
+        }
+        setNotice(incoming.length + '曲を読み込みました。次回からはフォルダを選ばずに再生できます。');
+        if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+      } catch (e) {
+        memOnly = true;
+        setNotice('容量不足などで端末に保存できませんでした。今回は再生できますが、次回はもう一度フォルダを選んでください（前回の曲と位置は覚えています）。');
+      }
+    } else {
+      memOnly = true;
+    }
+
+    renderList();
+    // keep the current track if it still exists, otherwise resume from the remembered one
+    const idx = wasId ? tracks.findIndex(t => t.id === wasId) : -1;
+    if (current >= 0 && idx >= 0 && !replace){
+      current = idx; buildOrder(idx); highlight();
+    } else if (idx >= 0){
+      buildOrder(idx);
+      load(idx, { autoplay: wasPlaying, startAt: wasTime });
+    } else if (tracks.length){
+      buildOrder(0);
+      load(0, { autoplay: false, startAt: 0 });
+    }
+  }
+
+  // ---------- list ----------
+  function renderList(){
+    const list = $('list');
+    list.innerHTML = '';
+    tracks.forEach((t, i) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.innerHTML = '<span class="n"></span><span class="t"></span>';
+      b.querySelector('.n').textContent = i + 1;
+      b.querySelector('.t').textContent = displayName(t.name);
+      b.onclick = () => { buildOrder(i); load(i, { autoplay: true }); };
+      li.appendChild(b);
+      list.appendChild(li);
+    });
+    $('empty').hidden = tracks.length > 0;
+    $('clearBtn').hidden = tracks.length === 0;
+    $('count').textContent = tracks.length ? tracks.length + '曲' : '';
+    ['prevBtn','nextBtn','playBtn','backBtn','fwdBtn'].forEach(id => $(id).disabled = !tracks.length);
+    highlight();
+  }
+  function highlight(){
+    const items = $('list').children;
+    [...items].forEach((li, i) => li.classList.toggle('current', i === current));
+  }
+
+  // ---------- order ----------
+  function buildOrder(start){
+    const n = tracks.length;
+    if (shuffle){
+      const rest = [...Array(n).keys()].filter(i => i !== start);
+      for (let i = rest.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+      order = start >= 0 ? [start, ...rest] : rest;
+      pos = 0;
+    } else {
+      order = [...Array(n).keys()];
+      pos = Math.max(0, start);
+    }
+  }
+
+  // ---------- playback ----------
+  function load(i, { autoplay = true, startAt = 0 } = {}){
+    if (i < 0 || i >= tracks.length) return;
+    if (curUrl) URL.revokeObjectURL(curUrl);
+    current = i;
+    curUrl = URL.createObjectURL(tracks[i].blob);
+    pendingSeek = startAt || 0;
+    audio.src = curUrl;
+    LS.set('lastId', tracks[i].id);
+    LS.set('lastTime', pendingSeek);
+    const title = displayName(tracks[i].name);
+    $('nowTitle').textContent = title;
+    $('dimTitle').textContent = title;
+    $('nowSub').textContent = (pos + 1) + ' / ' + order.length + (shuffle ? '（ランダム）' : '');
+    highlight();
+    const li = $('list').children[i];
+    if (li && li.scrollIntoView) li.scrollIntoView({ block: 'nearest' });
+    setMeta(title);
+    if (autoplay) audio.play().catch(() => {});
+  }
+
+  function next(manual){
+    if (!tracks.length) return;
+    if (!manual && repeat === 'one'){ audio.currentTime = 0; audio.play().catch(() => {}); return; }
+    pos++;
+    if (pos >= order.length){
+      if (repeat === 'all' || manual){
+        if (shuffle) buildOrder(-1); else pos = 0;
+      } else {
+        pos = order.length - 1;
+        audio.pause(); audio.currentTime = 0;
+        return;
+      }
+    }
+    load(order[pos], { autoplay: true });
+  }
+  function prev(){
+    if (!tracks.length) return;
+    if (audio.currentTime > 3){ audio.currentTime = 0; return; }
+    pos = pos > 0 ? pos - 1 : order.length - 1;
+    load(order[pos], { autoplay: true });
+  }
+  function skip(sec){
+    if (!isFinite(audio.duration)) return;
+    audio.currentTime = Math.min(Math.max(0, audio.currentTime + sec), audio.duration - 0.2);
+  }
+  function togglePlay(){
+    if (current < 0 && tracks.length){ buildOrder(0); load(0); return; }
+    if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+  }
+
+  function restoreLast(){
+    if (!tracks.length){
+      const id = LS.get('lastId', null);
+      if (id) setNotice('前回は「' + displayName(id.split('/').pop()) + '」の途中でした。フォルダを選ぶとその続きから再生します。');
+      return;
+    }
+    const id = LS.get('lastId', null);
+    let idx = id ? tracks.findIndex(t => t.id === id) : -1;
+    const t = idx >= 0 ? LS.get('lastTime', 0) : 0;
+    if (idx < 0) idx = 0;
+    buildOrder(idx);
+    load(idx, { autoplay: false, startAt: t });
+    if (t > 1) $('nowSub').textContent = '前回の続き（' + fmt(t) + '）から再生します';
+  }
+
+  // ---------- audio events ----------
+  audio.addEventListener('loadedmetadata', () => {
+    $('seek').max = audio.duration || 0;
+    $('tDur').textContent = fmt(audio.duration);
+    if (pendingSeek > 0 && pendingSeek < audio.duration - 1) audio.currentTime = pendingSeek;
+    pendingSeek = 0;
+    updateTime(true);
+  });
+  audio.addEventListener('play', () => {
+    if (pendingSeek > 0){ audio.currentTime = pendingSeek; pendingSeek = 0; }
+    setPlayIcon(true);
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+  });
+  audio.addEventListener('pause', () => {
+    setPlayIcon(false); saveTime();
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+  });
+  audio.addEventListener('ended', () => next(false));
+  audio.addEventListener('error', () => {
+    if (current >= 0) setNotice('「' + displayName(tracks[current].name) + '」はこの端末で再生できない形式です。次の曲へ進みます。');
+    setTimeout(() => next(true), 800);
+  });
+
+  let lastSave = 0, dragging = false;
+  audio.addEventListener('timeupdate', () => updateTime(false));
+  function updateTime(force){
+    const t = audio.currentTime || 0, d = audio.duration || 0;
+    if (!dragging){
+      $('seek').value = t;
+      $('seek').style.setProperty('--p', d ? (t / d * 100) + '%' : '0%');
+      $('tCur').textContent = fmt(t);
+    }
+    $('dimTime').textContent = fmt(t) + ' / ' + fmt(d);
+    const now = Date.now();
+    if (force || now - lastSave > 2000){
+      lastSave = now; saveTime();
+      if ('mediaSession' in navigator && navigator.mediaSession.setPositionState && isFinite(d) && d > 0){
+        try { navigator.mediaSession.setPositionState({ duration: d, playbackRate: audio.playbackRate, position: Math.min(t, d) }); } catch {}
+      }
+    }
+  }
+  function saveTime(){ if (current >= 0 && !pendingSeek) LS.set('lastTime', audio.currentTime || 0); }
+  addEventListener('pagehide', saveTime);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveTime(); });
+
+  const seek = $('seek');
+  seek.addEventListener('input', () => {
+    dragging = true;
+    $('tCur').textContent = fmt(+seek.value);
+    seek.style.setProperty('--p', audio.duration ? (seek.value / audio.duration * 100) + '%' : '0%');
+  });
+  seek.addEventListener('change', () => { audio.currentTime = +seek.value; dragging = false; });
+
+  // ---------- media session (lock screen / background controls) ----------
+  function setMeta(title){
+    if (!('mediaSession' in navigator)) return;
+    try { navigator.mediaSession.metadata = new MediaMetadata({ title, artist: 'トルミル', album: 'トルミル プレーヤー' }); } catch {}
+  }
+  if ('mediaSession' in navigator){
+    const h = (a, f) => { try { navigator.mediaSession.setActionHandler(a, f); } catch {} };
+    h('play', () => audio.play());
+    h('pause', () => audio.pause());
+    h('previoustrack', prev);
+    h('nexttrack', () => next(true));
+    h('seekbackward', d => skip(-(d && d.seekOffset || 10)));
+    h('seekforward', d => skip(d && d.seekOffset || 10));
+    h('seekto', d => { if (d && isFinite(d.seekTime)) audio.currentTime = d.seekTime; });
+  }
+
+  // ---------- controls ----------
+  $('playBtn').onclick = togglePlay;
+  $('prevBtn').onclick = prev;
+  $('nextBtn').onclick = () => next(true);
+  $('backBtn').onclick = () => skip(-10);
+  $('fwdBtn').onclick = () => skip(10);
+
+  function renderModes(){
+    $('shuffleBtn').setAttribute('aria-pressed', shuffle);
+    $('repeatBtn').setAttribute('aria-pressed', repeat !== 'off');
+    $('repeatLabel').textContent = { off: '繰り返しなし', all: '全曲繰り返し', one: '1曲繰り返し' }[repeat];
+  }
+  $('shuffleBtn').onclick = () => {
+    shuffle = !shuffle; LS.set('shuffle', shuffle);
+    buildOrder(current);
+    if (current >= 0) $('nowSub').textContent = (pos + 1) + ' / ' + order.length + (shuffle ? '（ランダム）' : '');
+    renderModes();
+  };
+  $('repeatBtn').onclick = () => {
+    repeat = { off: 'all', all: 'one', one: 'off' }[repeat]; LS.set('repeat', repeat);
+    renderModes();
+  };
+
+  $('pickDir').onchange = e => { if (e.target.files.length) addFiles(e.target.files, true); e.target.value = ''; };
+  $('pickFiles').onchange = e => { if (e.target.files.length) addFiles(e.target.files, false); e.target.value = ''; };
+  $('clearBtn').onclick = async () => {
+    if (!confirm('端末に保存した曲をすべて消去します。元のファイルは消えません。')) return;
+    audio.pause(); audio.removeAttribute('src'); audio.load();
+    if (curUrl) URL.revokeObjectURL(curUrl);
+    curUrl = null; current = -1; tracks = []; order = []; pos = -1;
+    if (db) try { await tx('readwrite', s => s.clear()); } catch {}
+    $('nowTitle').textContent = '曲が選ばれていません'; $('nowSub').textContent = '';
+    $('tCur').textContent = '0:00'; $('tDur').textContent = '0:00';
+    renderList(); setNotice('ライブラリを消去しました。');
+  };
+
+  // ---------- power saving mode ----------
+  let wakeLock = null, driftTimer = null, lastTap = 0;
+  async function lock(){
+    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+  }
+  function drift(){
+    const top = 15 + Math.random() * 60;
+    $('dimInfo').style.top = top + '%';
+  }
+  async function dimOn(){
+    $('dim').classList.add('on');
+    await lock();
+    drift(); driftTimer = setInterval(drift, 30000);
+  }
+  function dimOff(){
+    $('dim').classList.remove('on');
+    clearInterval(driftTimer);
+    if (wakeLock){ wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+  $('dimBtn').onclick = dimOn;
+  $('dim').addEventListener('click', () => {
+    const now = Date.now();
+    if (now - lastTap < 400) dimOff();
+    lastTap = now;
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && $('dim').classList.contains('on')) lock();
+  });
+
+  // ---------- helpers ----------
+  function setPlayIcon(playing){
+    $('playIcon').innerHTML = playing ? '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>' : '<path d="M8 5v14l11-7z"/>';
+    $('playBtn').setAttribute('aria-label', playing ? '一時停止' : '再生');
+  }
+  function fmt(s){
+    if (!isFinite(s) || s < 0) s = 0;
+    s = Math.floor(s);
+    const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = String(s % 60).padStart(2, '0');
+    return h ? h + ':' + String(m).padStart(2, '0') + ':' + sec : m + ':' + sec;
+  }
+  let noticeTimer;
+  function setNotice(t){
+    $('notice').textContent = t;
+    clearTimeout(noticeTimer);
+    if (t && !/保存しています/.test(t)) noticeTimer = setTimeout(() => $('notice').textContent = '', 12000);
+  }
+
+  renderModes();
+  loadLibrary();
+})();
+</script>
+</body>
+</html>
