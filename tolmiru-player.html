@@ -63,6 +63,14 @@ ol.list .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 ol.list li.current button{color:var(--accent);font-weight:700}
 ol.list li.current .n{color:var(--accent)}
 
+.search{
+  width:100%;padding:10px 16px;border-radius:999px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);font:inherit;font-size:16px;margin:0 0 10px;
+  -webkit-appearance:none;appearance:none;
+}
+.search:focus{outline:2px solid var(--accent);outline-offset:1px}
+.noresult{color:var(--muted);text-align:center;padding:24px 0;font-size:.9rem;margin:0}
+
 /* player */
 .player{
   position:fixed;left:0;right:0;bottom:0;z-index:10;
@@ -126,7 +134,9 @@ button:disabled{opacity:.35;cursor:default}
   </div>
   <p class="notice" id="notice"></p>
   <div class="empty" id="empty">トルミルアプリのフォルダを選ぶと、ここに曲が並びます。<br>フォルダを選べない端末では「曲を追加」でまとめて選んでください。</div>
+  <input type="search" class="search" id="q" placeholder="曲名で検索" aria-label="曲名で検索" enterkeyhint="search" hidden>
   <ol class="list" id="list"></ol>
+  <p class="noresult" id="noresult" hidden>一致する曲がありません。</p>
 </div>
 
 <audio id="audio" preload="metadata"></audio>
@@ -316,6 +326,8 @@ button:disabled{opacity:.35;cursor:default}
     });
     $('empty').hidden = tracks.length > 0;
     $('clearBtn').hidden = tracks.length === 0;
+    $('q').hidden = tracks.length === 0;
+    applyFilter();
     $('count').textContent = tracks.length ? tracks.length + '曲' : '';
     ['prevBtn','nextBtn','playBtn','backBtn','fwdBtn'].forEach(id => $(id).disabled = !tracks.length);
     highlight();
@@ -324,6 +336,24 @@ button:disabled{opacity:.35;cursor:default}
     const items = $('list').children;
     [...items].forEach((li, i) => li.classList.toggle('current', i === current));
   }
+
+  // ---------- search ----------
+  // ignores full/half width, upper/lower case, and hiragana/katakana differences
+  const norm = s => s.normalize('NFKC').toLowerCase()
+    .replace(/[\u3041-\u3096]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
+  function applyFilter(){
+    const words = norm($('q').value.trim()).split(/\s+/).filter(Boolean);
+    let shown = 0;
+    [...$('list').children].forEach((li, i) => {
+      const name = norm(displayName(tracks[i].name));
+      const hit = words.every(w => name.includes(w));
+      li.hidden = !hit;
+      if (hit) shown++;
+    });
+    $('noresult').hidden = !(words.length && shown === 0 && tracks.length);
+  }
+  $('q').addEventListener('input', applyFilter);
+  $('q').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
 
   // ---------- order ----------
   function buildOrder(start){
