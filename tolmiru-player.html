@@ -183,6 +183,7 @@ button:disabled{opacity:.35;cursor:default}
   let repeat = LS.get('repeat', 'all');  // off | all | one
   let memOnly = false;
   let db = null;
+  let retried = false, failStreak = 0;
 
   // ---------- IndexedDB ----------
   function openDB(){
@@ -204,6 +205,30 @@ button:disabled{opacity:.35;cursor:default}
     });
   }
 
+  // detect the real format from the file's first bytes (extension and MIME are often wrong)
+  function sniffType(b, name){
+    const s = (o, str) => b.length >= o + str.length && [...str].every((c, i) => b[o + i] === c.charCodeAt(0));
+    if (s(4, 'ftyp')) return 'audio/mp4';
+    if (b[0] === 0x1A && b[1] === 0x45 && b[2] === 0xDF && b[3] === 0xA3) return 'audio/webm';
+    if (b[0] === 0xFF && (b[1] & 0xF6) === 0xF0) return 'audio/aac';
+    if (s(0, 'ID3') || (b[0] === 0xFF && (b[1] & 0xE0) === 0xE0)) return 'audio/mpeg';
+    if (s(0, 'RIFF')) return 'audio/wav';
+    if (s(0, 'OggS')) return 'audio/ogg';
+    if (s(0, 'fLaC')) return 'audio/flac';
+    if (s(0, 'caff')) return 'audio/x-caf';
+    if (s(0, '#!AMR')) return 'audio/amr';
+    const ext = ((name.match(/\.([^.]+)$/) || [])[1] || '').toLowerCase();
+    return { mp3: 'audio/mpeg', m4a: 'audio/mp4', m4b: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', flac: 'audio/flac', webm: 'audio/webm', caf: 'audio/x-caf' }[ext] || '';
+  }
+  const describe = m => ({ 'audio/mp4': 'MP4/M4A', 'audio/webm': 'WebM', 'audio/aac': 'AAC', 'audio/mpeg': 'MP3', 'audio/wav': 'WAV', 'audio/ogg': 'Ogg', 'audio/flac': 'FLAC', 'audio/x-caf': 'CAF', 'audio/amr': 'AMR' }[m] || '不明');
+  async function detectTypes(){
+    for (const t of tracks){
+      if (t.mime) continue;
+      try { t.mime = sniffType(new Uint8Array(await t.blob.slice(0, 16).arrayBuffer()), t.name); }
+      catch { t.mime = ''; }
+    }
+  }
+
   const collator = new Intl.Collator('ja', { numeric: true });
   const sortTracks = () => tracks.sort((a, b) => collator.compare(a.id, b.id));
   const displayName = n => n.replace(/\.[^.]+$/, '');
@@ -217,6 +242,7 @@ button:disabled{opacity:.35;cursor:default}
       setNotice('この端末では曲を保存できないため、毎回フォルダを選んでください。前回の曲と位置は覚えています。');
     }
     sortTracks();
+    await detectTypes();
     renderList();
     restoreLast();
   }
@@ -236,6 +262,7 @@ button:disabled{opacity:.35;cursor:default}
       tracks = [...map.values()];
     }
     sortTracks();
+    await detectTypes();
 
     memOnly = false;
     if (db){
@@ -244,8 +271,8 @@ button:disabled{opacity:.35;cursor:default}
         if (replace) await tx('readwrite', s => s.clear());
         let i = 0;
         for (const t of incoming){
-          const blob = new Blob([await t.blob.arrayBuffer()], { type: t.blob.type || 'audio/mpeg' });
-          await tx('readwrite', s => s.put({ id: t.id, name: t.name, blob }));
+          const blob = new Blob([await t.blob.arrayBuffer()], { type: t.mime || t.blob.type || '' });
+          await tx('readwrite', s => s.put({ id: t.id, name: t.name, mime: t.mime, blob }));
           i++;
           if (i % 3 === 0 || i === incoming.length) setNotice('端末に保存しています… ' + i + ' / ' + incoming.length);
         }
@@ -317,7 +344,10 @@ button:disabled{opacity:.35;cursor:default}
     if (i < 0 || i >= tracks.length) return;
     if (curUrl) URL.revokeObjectURL(curUrl);
     current = i;
-    curUrl = URL.createObjectURL(tracks[i].blob);
+    const tk = tracks[i];
+    const typed = tk.mime && tk.blob.type !== tk.mime ? tk.blob.slice(0, tk.blob.size, tk.mime) : tk.blob;
+    curUrl = URL.createObjectURL(typed);
+    retried = false;
     pendingSeek = startAt || 0;
     audio.src = curUrl;
     LS.set('lastId', tracks[i].id);
@@ -396,9 +426,29 @@ button:disabled{opacity:.35;cursor:default}
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
   });
   audio.addEventListener('ended', () => next(false));
-  audio.addEventListener('error', () => {
-    if (current >= 0) setNotice('「' + displayName(tracks[current].name) + '」はこの端末で再生できない形式です。次の曲へ進みます。');
-    setTimeout(() => next(true), 800);
+  audio.addEventListener('playing', () => { failStreak = 0; });
+  audio.addEventListener('error', async () => {
+    if (current < 0 || !audio.getAttribute('src')) return;
+    const t = tracks[current];
+    // first failure: rebuild the data from scratch and try once more
+    if (!retried){
+      retried = true;
+      try {
+        const buf = await t.blob.arrayBuffer();
+        if (curUrl) URL.revokeObjectURL(curUrl);
+        curUrl = URL.createObjectURL(new Blob([buf], { type: t.mime || t.blob.type || '' }));
+        audio.src = curUrl;
+        audio.play().catch(() => {});
+        return;
+      } catch {}
+    }
+    const ext = (t.name.match(/\.[^.]+$/) || ['なし'])[0];
+    const supported = t.mime && audio.canPlayType(t.mime) !== '';
+    let msg = '「' + displayName(t.name) + '」を再生できません（中身：' + describe(t.mime) + '、拡張子：' + ext + '）。'
+      + (supported ? '' : 'この形式はこの端末のブラウザでは再生できません。');
+    failStreak++;
+    if (failStreak < 3){ setNotice(msg + '次の曲へ進みます。'); setTimeout(() => next(true), 1500); }
+    else { failStreak = 0; audio.pause(); setNotice(msg + '続けて再生できなかったため停止しました。'); }
   });
 
   let lastSave = 0, dragging = false;
