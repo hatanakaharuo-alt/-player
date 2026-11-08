@@ -45,6 +45,7 @@ button:focus-visible,label:focus-within{outline:2px solid var(--accent);outline-
 header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 0 12px}
 h1{font-size:1.35rem;font-weight:700;margin:0;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
 .logo{width:36px;height:36px;flex:none}
+.ver{font-size:.7rem;font-weight:500;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px;letter-spacing:0}
 .count{color:var(--muted);font-size:.85rem}
 .pickers{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .pick{
@@ -144,7 +145,7 @@ button:disabled{opacity:.35;cursor:default}
 <body>
 <div class="wrap">
   <header>
-    <h1><svg class="logo" viewBox="0 0 180 180" aria-hidden="true"><rect width="180" height="180" rx="40" fill="#0F7C8C"/><path d="M38 104V92a52 52 0 0 1 104 0v12" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round"/><rect x="26" y="96" width="28" height="48" rx="12" fill="#fff"/><rect x="126" y="96" width="28" height="48" rx="12" fill="#fff"/><circle cx="90" cy="118" r="26" fill="#fff"/><path d="M82 104v28l23-14z" fill="#0F7C8C"/></svg>トルミル プレーヤー</h1>
+    <h1><svg class="logo" viewBox="0 0 180 180" aria-hidden="true"><rect width="180" height="180" rx="40" fill="#0F7C8C"/><path d="M38 104V92a52 52 0 0 1 104 0v12" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round"/><rect x="26" y="96" width="28" height="48" rx="12" fill="#fff"/><rect x="126" y="96" width="28" height="48" rx="12" fill="#fff"/><circle cx="90" cy="118" r="26" fill="#fff"/><path d="M82 104v28l23-14z" fill="#0F7C8C"/></svg>トルミル プレーヤー<span class="ver">v1.5</span></h1>
     <span class="count" id="count"></span>
   </header>
   <div class="pickers">
