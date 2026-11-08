@@ -154,6 +154,7 @@ button:disabled{opacity:.35;cursor:default}
     <label class="pick">曲を追加
       <input type="file" id="pickFiles" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac" multiple>
     </label>
+    <button class="pick" id="urlBtn">URLから追加</button>
     <button class="pick clear" id="clearBtn" hidden>ライブラリを消去</button>
   </div>
   <p class="notice" id="notice"></p>
@@ -211,7 +212,7 @@ button:disabled{opacity:.35;cursor:default}
 (() => {
   const $ = id => document.getElementById(id);
   const audio = $('audio');
-  const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|webm|mp4|m4b|3gp|amr)$/i;
+  const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|webm|mp4|m4b|3gp|amr|caf)$/i;
   const LS = {
     get(k, d){ try { const v = localStorage.getItem('tmp.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v){ try { localStorage.setItem('tmp.' + k, JSON.stringify(v)); } catch {} }
@@ -613,6 +614,28 @@ button:disabled{opacity:.35;cursor:default}
     addFiles(files, true);
   };
   $('startSkip').onclick = () => { $('start').hidden = true; };
+
+  // add a song from a direct link to an audio file
+  $('urlBtn').onclick = async () => {
+    const raw = prompt('音声ファイルのURLを入力してください（.mp3 や .m4a などで終わるURL）');
+    if (!raw) return;
+    let url;
+    try { url = new URL(raw.trim()); if (!/^https?:$/.test(url.protocol)) throw 0; }
+    catch { setNotice('URLの形式が正しくありません。'); return; }
+    setNotice('ダウンロードしています…');
+    let res;
+    try { res = await fetch(url.href); }
+    catch { setNotice('このサイトからは直接取得できませんでした（サイト側が許可していない可能性があります）。ブラウザでファイルを保存してから「曲を追加」で読み込んでください。'); return; }
+    if (!res.ok){ setNotice('ダウンロードに失敗しました（エラー ' + res.status + '）。'); return; }
+    const blob = await res.blob();
+    const head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+    const mime = sniffType(head, '') || (blob.type.startsWith('audio/') ? blob.type : '');
+    if (!mime){ setNotice('音声ファイルではありませんでした。Webページではなく、音声ファイルそのもののURLを指定してください。'); return; }
+    let name = 'download';
+    try { name = decodeURIComponent(url.pathname.split('/').pop()) || name; } catch {}
+    if (!AUDIO_EXT.test(name)) name += ({ 'audio/mpeg': '.mp3', 'audio/mp4': '.m4a', 'audio/aac': '.aac', 'audio/wav': '.wav', 'audio/ogg': '.ogg', 'audio/flac': '.flac', 'audio/webm': '.webm', 'audio/x-caf': '.caf', 'audio/amr': '.amr' }[mime] || '');
+    addFiles([new File([blob], name, { type: mime })], false);
+  };
 
   $('pickDir').onchange = e => { if (e.target.files.length) addFiles(e.target.files, true); e.target.value = ''; };
   $('pickFiles').onchange = e => { if (e.target.files.length) addFiles(e.target.files, false); e.target.value = ''; };
