@@ -84,6 +84,7 @@ ol.list li.current .n{color:var(--accent)}
   background:var(--surface);color:var(--ink);font:inherit;font-size:16px;
 }
 ol.list li[hidden]{display:none}
+ol.list li > button:first-child{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 ol.list li.movable{display:flex;align-items:center}
 ol.list li.movable > button:first-child{flex:1;min-width:0}
 ol.list .mv{
@@ -160,7 +161,7 @@ button:disabled{opacity:.35;cursor:default}
 <body>
 <div class="wrap">
   <header>
-    <h1><svg class="logo" viewBox="0 0 180 180" aria-hidden="true"><rect width="180" height="180" rx="40" fill="#0F7C8C"/><path d="M38 104V92a52 52 0 0 1 104 0v12" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round"/><rect x="26" y="96" width="28" height="48" rx="12" fill="#fff"/><rect x="126" y="96" width="28" height="48" rx="12" fill="#fff"/><circle cx="90" cy="118" r="26" fill="#fff"/><path d="M82 104v28l23-14z" fill="#0F7C8C"/></svg>トルミル プレーヤー<span class="ver">v1.8</span></h1>
+    <h1><svg class="logo" viewBox="0 0 180 180" aria-hidden="true"><rect width="180" height="180" rx="40" fill="#0F7C8C"/><path d="M38 104V92a52 52 0 0 1 104 0v12" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round"/><rect x="26" y="96" width="28" height="48" rx="12" fill="#fff"/><rect x="126" y="96" width="28" height="48" rx="12" fill="#fff"/><circle cx="90" cy="118" r="26" fill="#fff"/><path d="M82 104v28l23-14z" fill="#0F7C8C"/></svg>トルミル プレーヤー<span class="ver">v1.9</span></h1>
     <span class="count" id="count"></span>
   </header>
   <div class="pickers">
@@ -223,7 +224,7 @@ button:disabled{opacity:.35;cursor:default}
     <span>新しく増えた曲だけを読み込みます。<br>前回の曲はそのまま続きから再生できます。</span>
   </label>
   <button class="start-skip" id="startSkip">選ばずに始める</button>
-  <p class="start-ver">トルミル プレーヤー v1.8</p>
+  <p class="start-ver">トルミル プレーヤー v1.9</p>
 </div>
 
 <div class="dim" id="dim" role="dialog" aria-label="省電力モード">
@@ -303,7 +304,7 @@ button:disabled{opacity:.35;cursor:default}
   const collator = new Intl.Collator('ja', { numeric: true });
   let sortMode = LS.get('sort', 'name');
   const sortTracks = () => {
-    const byName = (a, b) => collator.compare(a.id, b.id);
+    const byName = (a, b) => collator.compare(titleOf(a), titleOf(b)) || collator.compare(a.id, b.id);
     if (sortMode === 'name-desc') tracks.sort((a, b) => byName(b, a));
     else if (sortMode === 'date-new') tracks.sort((a, b) => (b.date || 0) - (a.date || 0) || byName(a, b));
     else if (sortMode === 'date-old') tracks.sort((a, b) => (a.date || 0) - (b.date || 0) || byName(a, b));
@@ -314,6 +315,24 @@ button:disabled{opacity:.35;cursor:default}
     } else tracks.sort(byName);
   };
   const displayName = n => n.replace(/\.[^.]+$/, '');
+  // names the user changed by long-pressing (the original files are not renamed)
+  const titles = LS.get('titles', {});
+  const titleOf = t => titles[t.id] || displayName(t.name);
+  function rename(t){
+    const v = prompt('表示する曲名を入力してください（空欄にすると元の名前に戻ります）', titleOf(t));
+    if (v === null) return;
+    const name = v.trim();
+    if (!name || name === displayName(t.name)) delete titles[t.id]; else titles[t.id] = name;
+    LS.set('titles', titles);
+    const cur = current >= 0 ? tracks[current] : null;
+    if (sortMode === 'name' || sortMode === 'name-desc') sortTracks();
+    afterReorder(cur);
+    if (cur === t){
+      $('nowTitle').textContent = titleOf(t);
+      $('dimTitle').textContent = titleOf(t);
+      setMeta(titleOf(t));
+    }
+  }
 
   async function loadLibrary(){
     try {
@@ -412,8 +431,17 @@ button:disabled{opacity:.35;cursor:default}
       const b = document.createElement('button');
       b.innerHTML = '<span class="n"></span><span class="t"></span>';
       b.querySelector('.n').textContent = i + 1;
-      b.querySelector('.t').textContent = displayName(t.name);
-      b.onclick = () => { buildOrder(i); load(i, { autoplay: true }); };
+      b.querySelector('.t').textContent = titleOf(t);
+      // long press (0.6 s) renames; a normal tap plays
+      let lp = null, fired = false, sx = 0, sy = 0;
+      const cancel = () => clearTimeout(lp);
+      b.addEventListener('pointerdown', e => { fired = false; sx = e.clientX; sy = e.clientY; lp = setTimeout(() => { fired = true; rename(t); }, 600); });
+      b.addEventListener('pointerup', cancel);
+      b.addEventListener('pointercancel', cancel);
+      b.addEventListener('pointerleave', cancel);
+      b.addEventListener('pointermove', e => { if (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10) cancel(); });
+      b.addEventListener('contextmenu', e => e.preventDefault());
+      b.onclick = () => { if (fired){ fired = false; return; } buildOrder(i); load(i, { autoplay: true }); };
       li.appendChild(b);
       if (sortMode === 'custom'){
         li.classList.add('movable');
@@ -448,7 +476,7 @@ button:disabled{opacity:.35;cursor:default}
     const words = norm($('q').value.trim()).split(/\s+/).filter(Boolean);
     let shown = 0;
     [...$('list').children].forEach((li, i) => {
-      const name = norm(displayName(tracks[i].name));
+      const name = norm(titleOf(tracks[i]));
       const hit = words.every(w => name.includes(w));
       li.hidden = !hit;
       if (hit) shown++;
@@ -485,7 +513,7 @@ button:disabled{opacity:.35;cursor:default}
     audio.src = curUrl;
     LS.set('lastId', tracks[i].id);
     LS.set('lastTime', pendingSeek);
-    const title = displayName(tracks[i].name);
+    const title = titleOf(tracks[i]);
     $('nowTitle').textContent = title;
     $('dimTitle').textContent = title;
     $('nowSub').textContent = (pos + 1) + ' / ' + order.length + (shuffle ? '（ランダム）' : '');
@@ -657,7 +685,7 @@ button:disabled{opacity:.35;cursor:default}
   function showStart(){
     const id = LS.get('lastId', null);
     $('startSkip').textContent = !tracks.length ? '選ばずに始める'
-      : id ? '選ばずに続きから（' + displayName(id.split('/').pop()) + '）'
+      : id ? '選ばずに続きから（' + (titles[id] || displayName(id.split('/').pop())) + '）'
       : '選ばずに始める';
     $('start').hidden = false;
   }
@@ -781,7 +809,7 @@ button:disabled{opacity:.35;cursor:default}
 
   // ---------- auto update ----------
   // compares this page's version with the one on the server and reloads the newest page
-  const APP_VERSION = 'v1.8';
+  const APP_VERSION = 'v1.9';
   async function checkUpdate(){
     if (!navigator.onLine || !audio.paused) return;
     try {
