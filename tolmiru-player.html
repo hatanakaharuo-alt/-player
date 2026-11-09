@@ -76,6 +76,20 @@ ol.list li.current .n{color:var(--accent)}
 }
 .search:focus{outline:2px solid var(--accent);outline-offset:1px}
 .noresult{color:var(--muted);text-align:center;padding:24px 0;font-size:.9rem;margin:0}
+.tools{display:flex;gap:8px;margin-bottom:10px}
+.tools[hidden]{display:none}
+.tools .search{flex:1;min-width:0;margin:0}
+.sortsel{
+  flex:none;max-width:44%;padding:10px 12px;border-radius:999px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);font:inherit;font-size:16px;
+}
+ol.list li[hidden]{display:none}
+ol.list li.movable{display:flex;align-items:center}
+ol.list li.movable > button:first-child{flex:1;min-width:0}
+ol.list .mv{
+  width:40px;height:40px;flex:none;display:grid;place-items:center;grid-template-columns:none;
+  padding:0;color:var(--muted);font-size:.8rem;border-radius:8px;
+}
 
 /* player */
 .player{
@@ -145,7 +159,7 @@ button:disabled{opacity:.35;cursor:default}
 <body>
 <div class="wrap">
   <header>
-    <h1><svg class="logo" viewBox="0 0 180 180" aria-hidden="true"><rect width="180" height="180" rx="40" fill="#0F7C8C"/><path d="M38 104V92a52 52 0 0 1 104 0v12" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round"/><rect x="26" y="96" width="28" height="48" rx="12" fill="#fff"/><rect x="126" y="96" width="28" height="48" rx="12" fill="#fff"/><circle cx="90" cy="118" r="26" fill="#fff"/><path d="M82 104v28l23-14z" fill="#0F7C8C"/></svg>トルミル プレーヤー<span class="ver">v1.5</span></h1>
+    <h1><svg class="logo" viewBox="0 0 180 180" aria-hidden="true"><rect width="180" height="180" rx="40" fill="#0F7C8C"/><path d="M38 104V92a52 52 0 0 1 104 0v12" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round"/><rect x="26" y="96" width="28" height="48" rx="12" fill="#fff"/><rect x="126" y="96" width="28" height="48" rx="12" fill="#fff"/><circle cx="90" cy="118" r="26" fill="#fff"/><path d="M82 104v28l23-14z" fill="#0F7C8C"/></svg>トルミル プレーヤー<span class="ver">v1.6</span></h1>
     <span class="count" id="count"></span>
   </header>
   <div class="pickers">
@@ -160,7 +174,16 @@ button:disabled{opacity:.35;cursor:default}
   </div>
   <p class="notice" id="notice"></p>
   <div class="empty" id="empty">トルミルアプリのフォルダを選ぶと、ここに曲が並びます。<br>フォルダを選べない端末では「曲を追加」でまとめて選んでください。</div>
-  <input type="search" class="search" id="q" placeholder="曲名で検索" aria-label="曲名で検索" enterkeyhint="search" hidden>
+  <div class="tools" id="tools" hidden>
+    <input type="search" class="search" id="q" placeholder="曲名で検索" aria-label="曲名で検索" enterkeyhint="search">
+    <select class="sortsel" id="sortSel" aria-label="再生順">
+      <option value="name">名前順</option>
+      <option value="name-desc">名前の逆順</option>
+      <option value="date-new">新しい順</option>
+      <option value="date-old">古い順</option>
+      <option value="custom">自分で並べる</option>
+    </select>
+  </div>
   <ol class="list" id="list"></ol>
   <p class="noresult" id="noresult" hidden>一致する曲がありません。</p>
 </div>
@@ -276,7 +299,18 @@ button:disabled{opacity:.35;cursor:default}
   }
 
   const collator = new Intl.Collator('ja', { numeric: true });
-  const sortTracks = () => tracks.sort((a, b) => collator.compare(a.id, b.id));
+  let sortMode = LS.get('sort', 'name');
+  const sortTracks = () => {
+    const byName = (a, b) => collator.compare(a.id, b.id);
+    if (sortMode === 'name-desc') tracks.sort((a, b) => byName(b, a));
+    else if (sortMode === 'date-new') tracks.sort((a, b) => (b.date || 0) - (a.date || 0) || byName(a, b));
+    else if (sortMode === 'date-old') tracks.sort((a, b) => (a.date || 0) - (b.date || 0) || byName(a, b));
+    else if (sortMode === 'custom'){
+      const rank = new Map(LS.get('customOrder', []).map((id, i) => [id, i]));
+      const r = t => rank.has(t.id) ? rank.get(t.id) : 1e9;
+      tracks.sort((a, b) => r(a) - r(b) || byName(a, b));
+    } else tracks.sort(byName);
+  };
   const displayName = n => n.replace(/\.[^.]+$/, '');
 
   async function loadLibrary(){
@@ -306,7 +340,11 @@ button:disabled{opacity:.35;cursor:default}
     const incoming = files.map(f => {
       const id = f.webkitRelativePath || f.name;
       const p = prev.get(id);
-      return p && p.blob && p.blob.size === f.size ? p : { id, name: f.name, blob: f, fresh: true };
+      if (p && p.blob && p.blob.size === f.size){
+        if (!p.date && f.lastModified){ p.date = f.lastModified; p.dateOnly = true; }
+        return p;
+      }
+      return { id, name: f.name, blob: f, date: f.lastModified || Date.now(), fresh: true };
     });
     const toSave = incoming.filter(t => t.fresh);
     const keep = new Set(incoming.map(t => t.id));
@@ -324,11 +362,15 @@ button:disabled{opacity:.35;cursor:default}
     if (db){
       try {
         if (removed.length) await tx('readwrite', s => { removed.forEach(id => s.delete(id)); });
+        const dated = incoming.filter(t => t.dateOnly);
+        if (dated.length) await tx('readwrite', s => {
+          dated.forEach(t => { delete t.dateOnly; s.put({ id: t.id, name: t.name, mime: t.mime, date: t.date, blob: t.blob }); });
+        });
         let i = 0;
         if (toSave.length) setNotice('端末に保存しています… 0 / ' + toSave.length);
         for (const t of toSave){
           const blob = new Blob([await t.blob.arrayBuffer()], { type: t.mime || t.blob.type || '' });
-          await tx('readwrite', s => s.put({ id: t.id, name: t.name, mime: t.mime, blob }));
+          await tx('readwrite', s => s.put({ id: t.id, name: t.name, mime: t.mime, date: t.date, blob }));
           t.blob = blob; delete t.fresh;
           i++;
           if (i % 3 === 0 || i === toSave.length) setNotice('端末に保存しています… ' + i + ' / ' + toSave.length);
@@ -371,11 +413,21 @@ button:disabled{opacity:.35;cursor:default}
       b.querySelector('.t').textContent = displayName(t.name);
       b.onclick = () => { buildOrder(i); load(i, { autoplay: true }); };
       li.appendChild(b);
+      if (sortMode === 'custom'){
+        li.classList.add('movable');
+        [['▲', -1, '上へ'], ['▼', 1, '下へ']].forEach(([s, d, label]) => {
+          const m = document.createElement('button');
+          m.className = 'mv'; m.textContent = s; m.setAttribute('aria-label', label);
+          m.disabled = i + d < 0 || i + d >= tracks.length;
+          m.onclick = () => move(i, d);
+          li.appendChild(m);
+        });
+      }
       list.appendChild(li);
     });
     $('empty').hidden = tracks.length > 0;
     $('clearBtn').hidden = tracks.length === 0;
-    $('q').hidden = tracks.length === 0;
+    $('tools').hidden = tracks.length === 0;
     applyFilter();
     $('count').textContent = tracks.length ? tracks.length + '曲' : '';
     ['prevBtn','nextBtn','playBtn','backBtn','fwdBtn'].forEach(id => $(id).disabled = !tracks.length);
@@ -636,6 +688,33 @@ button:disabled{opacity:.35;cursor:default}
     try { name = decodeURIComponent(url.pathname.split('/').pop()) || name; } catch {}
     if (!AUDIO_EXT.test(name)) name += ({ 'audio/mpeg': '.mp3', 'audio/mp4': '.m4a', 'audio/aac': '.aac', 'audio/wav': '.wav', 'audio/ogg': '.ogg', 'audio/flac': '.flac', 'audio/webm': '.webm', 'audio/x-caf': '.caf', 'audio/amr': '.amr' }[mime] || '');
     addFiles([new File([blob], name, { type: mime })], false);
+  };
+
+  // ---------- play order setting ----------
+  function afterReorder(cur){
+    current = cur ? tracks.indexOf(cur) : -1;
+    renderList();
+    if (current >= 0){
+      buildOrder(current);
+      $('nowSub').textContent = (pos + 1) + ' / ' + order.length + (shuffle ? '（ランダム）' : '');
+    }
+  }
+  function move(i, d){
+    const j = i + d;
+    if (j < 0 || j >= tracks.length) return;
+    const cur = current >= 0 ? tracks[current] : null;
+    [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+    LS.set('customOrder', tracks.map(t => t.id));
+    afterReorder(cur);
+  }
+  $('sortSel').value = sortMode;
+  $('sortSel').onchange = e => {
+    const cur = current >= 0 ? tracks[current] : null;
+    sortMode = e.target.value;
+    LS.set('sort', sortMode);
+    if (sortMode === 'custom' && !LS.get('customOrder', []).length) LS.set('customOrder', tracks.map(t => t.id));
+    sortTracks();
+    afterReorder(cur);
   };
 
   $('pickDir').onchange = e => { if (e.target.files.length) addFiles(e.target.files, true); e.target.value = ''; };
