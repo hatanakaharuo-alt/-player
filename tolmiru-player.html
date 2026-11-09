@@ -142,6 +142,7 @@ button:disabled{opacity:.35;cursor:default}
   margin-top:14px;padding:14px;border-radius:999px;background:var(--chip);font-size:.95rem;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
+.start-ver{margin:12px 0 0;text-align:center;font-size:.8rem;color:var(--muted)}
 
 /* power saving */
 .dim{
@@ -159,7 +160,7 @@ button:disabled{opacity:.35;cursor:default}
 <body>
 <div class="wrap">
   <header>
-    <h1><svg class="logo" viewBox="0 0 180 180" aria-hidden="true"><rect width="180" height="180" rx="40" fill="#0F7C8C"/><path d="M38 104V92a52 52 0 0 1 104 0v12" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round"/><rect x="26" y="96" width="28" height="48" rx="12" fill="#fff"/><rect x="126" y="96" width="28" height="48" rx="12" fill="#fff"/><circle cx="90" cy="118" r="26" fill="#fff"/><path d="M82 104v28l23-14z" fill="#0F7C8C"/></svg>トルミル プレーヤー<span class="ver">v1.6</span></h1>
+    <h1><svg class="logo" viewBox="0 0 180 180" aria-hidden="true"><rect width="180" height="180" rx="40" fill="#0F7C8C"/><path d="M38 104V92a52 52 0 0 1 104 0v12" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round"/><rect x="26" y="96" width="28" height="48" rx="12" fill="#fff"/><rect x="126" y="96" width="28" height="48" rx="12" fill="#fff"/><circle cx="90" cy="118" r="26" fill="#fff"/><path d="M82 104v28l23-14z" fill="#0F7C8C"/></svg>トルミル プレーヤー<span class="ver">v1.7</span></h1>
     <span class="count" id="count"></span>
   </header>
   <div class="pickers">
@@ -222,6 +223,7 @@ button:disabled{opacity:.35;cursor:default}
     <span>新しく増えた曲だけを読み込みます。<br>前回の曲はそのまま続きから再生できます。</span>
   </label>
   <button class="start-skip" id="startSkip">選ばずに始める</button>
+  <p class="start-ver">トルミル プレーヤー v1.7</p>
 </div>
 
 <div class="dim" id="dim" role="dialog" aria-label="省電力モード">
